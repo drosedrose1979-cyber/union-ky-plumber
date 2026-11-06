@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Tracker — Built Like This</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d0f; color: #e8e2d4; font-family: Georgia, 'Times New Roman', serif; padding: 16px; }
+  header { text-align: center; margin-bottom: 8px; }
+  h1 { font-size: 1.5rem; letter-spacing: .12em; text-transform: lowercase; color: #d8c690; }
+  #stamp { text-align: center; font-size: .8rem; color: #8a8578; margin-bottom: 16px; font-family: monospace; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; max-width: 1100px; margin: 0 auto; }
+  .card { border-radius: 10px; padding: 14px; border: 1px solid #2a2a2e; background: #16161a; border-left: 8px solid #555; }
+  .card .seat { font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; color: #9a958a; font-family: monospace; }
+  .card .ai { font-size: 1.3rem; margin: 2px 0 6px; color: #f2ecd9; }
+  .card .task { font-size: .95rem; line-height: 1.35; min-height: 2.4em; }
+  .card .meta { font-size: .8rem; color: #9a958a; margin-top: 8px; font-family: monospace; }
+  .card .problems { font-size: .82rem; color: #e0a3a3; margin-top: 6px; line-height: 1.3; }
+  .card a { color: #d8c690; }
+  .badge { display: inline-block; font-size: .72rem; font-family: monospace; padding: 2px 8px; border-radius: 20px; margin-top: 8px; letter-spacing: .08em; }
+  .s-not { border-left-color: #6b6b6b; } .s-not .badge { background: #2c2c2c; color: #bdbdbd; }
+  .s-working { border-left-color: #e6c619; } .s-working .badge { background: #4a3f05; color: #ffe95e; }
+  .s-done { border-left-color: #2ea44f; } .s-done .badge { background: #0f3520; color: #6fe08c; }
+  .s-blocked { border-left-color: #d73a49; } .s-blocked .badge { background: #451016; color: #ff9aa5; }
+  #err { text-align: center; color: #ff9aa5; font-family: monospace; font-size: .85rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header><h1>the table — tracker</h1></header>
+<div id="stamp">loading…</div>
+<div id="grid"></div>
+<div id="err"></div>
+<script>
+var CSV_URL = "https://docs.google.com/spreadsheets/d/1nZqmfAFwhm2W9TaW88WHq_l65QECKZk-yvPPdiD48VA/export?format=csv";
+function parseCSV(text) {
+  var rows = [], row = [], field = "", inQ = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else { inQ = false; } }
+      else { field += c; }
+    } else {
+      if (c === '"') { inQ = true; }
+      else if (c === ',') { row.push(field); field = ""; }
+      else if (c === '\n') { row.push(field); field = ""; rows.push(row); row = []; }
+      else if (c === '\r') { }
+      else { field += c; }
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+function cls(status) {
+  status = (status || "").trim().toLowerCase();
+  if (status === "done") return "s-done";
+  if (status === "working") return "s-working";
+  if (status === "blocked") return "s-blocked";
+  return "s-not";
+}
+function esc(s) { return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function render(rows) {
+  var grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r || r.length < 4) continue;
+    var seat = r[0], ai = r[1], task = r[2], status = r[3], deadline = r[4], link = r[5], updated = r[6], problems = r[7];
+    if (!ai && !task) continue;
+    var card = document.createElement("div");
+    card.className = "card " + cls(status);
+    var html = '<div class="seat">seat ' + esc(seat) + '</div>' +
+      '<div class="ai">' + esc(ai) + '</div>' +
+      '<div class="task">' + esc(task || "—") + '</div>' +
+      '<span class="badge">' + esc(status || "Not started") + '</span>';
+    if (deadline) html += '<div class="meta">deadline: ' + esc(deadline) + '</div>';
+    if (updated) html += '<div class="meta">updated: ' + esc(updated) + '</div>';
+    if (problems) html += '<div class="problems">⚠ ' + esc(problems) + '</div>';
+    if (link) html += '<div class="meta"><a href="' + esc(link) + '" target="_blank" rel="noopener">open in table log</a></div>';
+    card.innerHTML = html;
+    grid.appendChild(card);
+  }
+  document.getElementById("stamp").textContent = "last refresh: " + new Date().toLocaleTimeString() + " · auto-refreshes every 5 minutes";
+  document.getElementById("err").textContent = "";
+}
+function load() {
+  fetch(CSV_URL + "&t=" + Date.now())
+    .then(function(res) { if (!res.ok) throw new Error("sheet fetch failed"); return res.text(); })
+    .then(function(text) { render(parseCSV(text)); })
+    .catch(function(e) { document.getElementById("err").textContent = "could not load the sheet — retrying in 5 minutes."; });
+}
+load();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>
